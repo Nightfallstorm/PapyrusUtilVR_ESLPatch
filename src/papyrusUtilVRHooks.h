@@ -17,8 +17,8 @@ namespace PapyrusUtilVRHooks
 		}
 	};
 
-	struct UnkFileNameHook {
-		
+	struct UnkFileNameHook
+	{
 		struct ASMJmp : Xbyak::CodeGenerator
 		{
 			ASMJmp(std::uintptr_t func, std::uintptr_t jmpAddr)
@@ -38,23 +38,24 @@ namespace PapyrusUtilVRHooks
 			}
 		};
 
-		static char* GetFileName(RE::TESForm* a_form) {
+		static char* GetFileName(RE::TESForm* a_form)
+		{
 			logger::info("GetFileName called");
 			logger::info("FileName result: {}", a_form->GetFile()->fileName);
 
 			return a_form->GetFile()->fileName;
 		}
 
-		static void Install(std::uintptr_t a_base) {
+		static void Install(std::uintptr_t a_base)
+		{
 			std::uintptr_t target{ a_base + 0x3C330 + 0xAB };
 			std::uintptr_t jmpBack{ a_base + 0x3C330 + 0xC4 };
 
-			auto newCompareCheck = ASMJmp((uintptr_t) GetFileName, jmpBack);
+			auto newCompareCheck = ASMJmp((uintptr_t)GetFileName, jmpBack);
 			newCompareCheck.ready();
 			int fillRange = jmpBack - target;
 			REL::safe_fill(target, REL::NOP, fillRange);
 			auto& trampoline = SKSE::GetTrampoline();
-			trampoline.create(newCompareCheck.getSize(), (void*)target);
 			auto result = trampoline.allocate(newCompareCheck);
 			trampoline.write_branch<5>(target, result);
 		}
@@ -96,7 +97,7 @@ namespace PapyrusUtilVRHooks
 			} else {
 				form |= file->compileIndex << 24;
 			}
-			
+
 			return form;
 		}
 
@@ -110,7 +111,6 @@ namespace PapyrusUtilVRHooks
 			int fillRange = jmpBack - target;
 			REL::safe_fill(target, REL::NOP, fillRange);
 			auto& trampoline = SKSE::GetTrampoline();
-			trampoline.create(newCompareCheck.getSize(), (void*)target);
 			auto result = trampoline.allocate(newCompareCheck);
 			trampoline.write_branch<5>(target, result);
 		}
@@ -141,12 +141,11 @@ namespace PapyrusUtilVRHooks
 		}
 	}
 
-
 	namespace saveIndexHooks
 	{
 		struct RemapJmp : Xbyak::CodeGenerator
 		{
-			RemapJmp(std::uintptr_t jmpAddr, std::uintptr_t func = (uintptr_t) RemapFormFromSave)
+			RemapJmp(std::uintptr_t jmpAddr, std::uintptr_t func = (uintptr_t)RemapFormFromSave)
 			{
 				Xbyak::Label funcLabel;
 
@@ -186,7 +185,6 @@ namespace PapyrusUtilVRHooks
 				std::uintptr_t baseFunc = a_base + 0x17F90;
 				std::uintptr_t target{ baseFunc + 0x3F1 };
 				std::uintptr_t jmpBack{ baseFunc + 0x431 };
-
 
 				auto jmpCode = RemapJmp(jmpBack);
 				jmpCode.ready();
@@ -247,7 +245,7 @@ namespace PapyrusUtilVRHooks
 		{
 			static void Install(std::uintptr_t a_base)
 			{
-				std::uintptr_t baseFunc = a_base + 0x6B010; // Same func as Unk3
+				std::uintptr_t baseFunc = a_base + 0x6B010;  // Same func as Unk3
 				std::uintptr_t target{ baseFunc + 0x20B };
 				std::uintptr_t jmpBack{ baseFunc + 0x24B };
 
@@ -318,8 +316,8 @@ namespace PapyrusUtilVRHooks
 		}
 	}
 
-	void LoadMods(SKSE::SerializationInterface* intfc) {
-
+	void LoadMods(SKSE::SerializationInterface* intfc)
+	{
 		s_savedModIndexMap.clear();
 
 		auto handler = RE::TESDataHandler::GetSingleton();
@@ -357,7 +355,8 @@ namespace PapyrusUtilVRHooks
 		}
 	}
 
-	void LoadLegacyMods(std::uint64_t a_unk) {
+	void LoadLegacyMods(std::uint64_t a_unk)
+	{
 		// Do nothing (Maybe we should to be safe?
 	}
 
@@ -384,7 +383,7 @@ namespace PapyrusUtilVRHooks
 
 		return form;
 	}
-	
+
 	struct Patches
 	{
 		std::string name;
@@ -401,7 +400,16 @@ namespace PapyrusUtilVRHooks
 
 	void Install()
 	{
+		constexpr std::size_t gigabyte = static_cast<std::size_t>(1) << 30;
+
 		auto papyrusutil_base = reinterpret_cast<uintptr_t>(GetModuleHandleA("PapyrusUtil"));
+
+		// Allocate space near the module's address for all of our assembly hooks to go into
+		// Each hook has to be within 2 GB of the trampoline space for the REL 32-bit jmps to work
+		// The trampoline logic checks for first available region to allocate from 2 GB below addr to 2 GB above addr
+		// So we add a gigabyte to ensure the entire DLL is within 2 GB of the allocated region
+		auto& trampoline = SKSE::GetTrampoline();
+		trampoline.create(0x200, (void*)(papyrusutil_base + gigabyte));
 
 		for (const auto& patch : patches) {
 			logger::info("Trying to patch {} at {:x} with {:x}"sv, patch.name, papyrusutil_base + patch.offset, (std::uintptr_t)patch.function);
